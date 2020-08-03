@@ -283,7 +283,7 @@ class ApolloClient(object):
                 # no change, loop
                 logging.getLogger(__name__).debug('No change, loop...')
                 return
-            #@
+
             if r.status_code == 200:
                 data = r.json()
                 for entry in data:
