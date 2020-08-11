@@ -35,6 +35,7 @@ class ApolloClient(object):
     """
 
     def __init__(self, app_id, cluster='default', config_server_url='http://localhost:8080', timeout=60, ip=None,
+                 secret='',
                  cycle_time=300, cache_file_path=None):
         """
 
@@ -50,6 +51,7 @@ class ApolloClient(object):
         self.app_id = app_id
         self.cluster = cluster
         self.timeout = timeout
+        self.secret = secret
         self.stopped = False
         self.ip = self.init_ip(ip)
 
