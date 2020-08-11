@@ -9,11 +9,21 @@ import logging
 import os
 import threading
 import time
+import sys
 from telnetlib import Telnet
 
 import requests
 
 from .exceptions import NameSpaceNotFoundException, ServerNotResponseException, BasicException
+
+def myUrlEncode(params):
+    version = sys.version_info.major
+    if version == 3:
+        from urllib import parse
+        return parse.urlencode(params)
+    else:
+        from urllib import urlencode
+        return urlencode(params)
 
 
 class ApolloClient(object):
@@ -171,7 +181,7 @@ class ApolloClient(object):
                                                           self.ip)
         data = {}
         try:
-            r = self._http_get(url)
+            r = self._http_get(url, headers=self._signHeaders(url))
             if r.status_code == 200:
                 data = r.json()
                 self._cache[namespace] = data
@@ -200,7 +210,7 @@ class ApolloClient(object):
         """
         url = '{}/configs/{}/{}/{}?ip={}'.format(self.config_server_url, self.app_id, self.cluster, namespace, self.ip)
         try:
-            r = self._http_get(url)
+            r = self._http_get(url, headers=self._signHeaders(url))
             if r.status_code == 200:
                 data = r.json()
                 self._cache[namespace] = data['configurations']
@@ -271,11 +281,14 @@ class ApolloClient(object):
                 'notificationId': notification_id
             })
         try:
-            r = requests.get(url=url, params={
+            params = {
                 'appId': self.app_id,
                 'cluster': self.cluster,
                 'notifications': json.dumps(notifications, ensure_ascii=False)
-            }, timeout=self.timeout)
+            }
+            paramStr = myUrlEncode(params)
+            url = url + '?' + paramStr
+            r = requests.get(url=url, timeout=self.timeout, headers=self._signHeaders(url))
 
             logging.getLogger(__name__).debug('Long polling returns %d: url=%s', r.status_code, r.request.url)
 
@@ -332,3 +345,21 @@ class ApolloClient(object):
 
         logging.getLogger(__name__).info("Listener stopped!")
         self.stopped = True
+
+    def _signature(self, timestamp, uri, secret):
+        import hmac
+        import base64
+        stringToSign = '' + timestamp + '\n' + uri
+        hmac_code = hmac.new(secret.encode(), stringToSign.encode(), hashlib.sha1).digest()
+        return base64.b64encode(hmac_code).decode()
+
+    # Return header with signature
+    def _signHeaders(self, url):
+        headers = {}
+        if self.secret == '':
+            return headers
+        uri = url[len(self.config_server_url):len(url)]
+        timeUnixNow = str(int(round(time.time() * 1000)))
+        headers['Authorization'] = 'Apollo ' + self.app_id + ':' + self._signature(timeUnixNow, uri, self.secret)
+        headers['Timestamp'] = timeUnixNow
+        return headers
